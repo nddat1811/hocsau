@@ -33,7 +33,10 @@ def cross_validate_regressor(
     seed: int,
     max_iter: int,
 ) -> dict:
-    folds = min(10, int(np.bincount(y).min()))
+    _, class_counts = np.unique(y, return_counts=True)
+    folds = min(10, int(class_counts.min()))
+    if folds < 2:
+        raise ValueError("Need at least two samples per class for cross-validation.")
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
     mse_scores = []
     r2_scores = []

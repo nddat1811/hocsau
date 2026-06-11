@@ -41,6 +41,8 @@ def run_stage_detection(
 
     rows = []
     matrices = {}
+    labels = sorted(np.unique(np.concatenate([y_train_bal, y_test])).tolist())
+    label_names = stage_label_names(labels)
     for selector_name, selected in selectors.items():
         names = [data.features[i] for i in selected]
         for model_name in ["mlp", "svm"]:
@@ -68,7 +70,10 @@ def run_stage_detection(
                     **cv,
                 }
             )
-            matrices[f"{model_name}_{selector_name}"] = result["confusion"].tolist()
+            matrices[f"{model_name}_{selector_name}"] = {
+                "labels": label_names,
+                "matrix": result["confusion"].tolist(),
+            }
 
     (out_dir / "stage_detection_metrics.json").write_text(
         json.dumps(rows, indent=2),
@@ -78,3 +83,9 @@ def run_stage_detection(
         json.dumps(matrices, indent=2),
         encoding="utf-8",
     )
+
+
+def stage_label_names(labels: list[int]) -> list[str]:
+    if labels == [1, 2, 3]:
+        return ["Level 1", "Level 2", "Level 3/4"]
+    return [f"Stage {label}" for label in labels]

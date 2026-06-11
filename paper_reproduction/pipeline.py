@@ -25,6 +25,7 @@ def main() -> None:
     data = make_tabular_data(df, args.target_col)
 
     write_distribution(df, out_dir, args.seed, args.test_size)
-    run_stage_detection(data, out_dir, args, rng)
+    if not args.skip_detection:
+        run_stage_detection(data, out_dir, args, rng)
     if args.run_lstm:
         run_lstm_forecasts(df, data.features, out_dir, args)

@@ -75,6 +75,11 @@ def run_lstm_forecasts(
             "target_std": target_std,
             "history": history,
         }
+        write_lstm_results(out_dir, results)
+    write_lstm_results(out_dir, results)
+
+
+def write_lstm_results(out_dir: Path, results: dict) -> None:
     (out_dir / "lstm_forecast_metrics.json").write_text(
         json.dumps(results, indent=2),
         encoding="utf-8",
