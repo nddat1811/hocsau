@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 from sklearn.feature_selection import SequentialFeatureSelector, mutual_info_regression
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsRegressor
 
 
 def relief_f_scores(x: np.ndarray, y: np.ndarray, n_neighbors: int = 10) -> np.ndarray:
@@ -67,12 +68,14 @@ def select_features(
         return np.argsort(scores)[::-1][:num_features]
 
     if method == "sfs":
-        estimator = KNeighborsClassifier(n_neighbors=5)
+        unique_y = np.unique(y)
+        is_regression = np.issubdtype(np.asarray(y).dtype, np.floating) and len(unique_y) > 20
+        estimator = KNeighborsRegressor(n_neighbors=5) if is_regression else KNeighborsClassifier(n_neighbors=5)
         selector = SequentialFeatureSelector(
             estimator,
             n_features_to_select=num_features,
             direction="forward",
-            scoring="accuracy",
+            scoring="neg_mean_squared_error" if is_regression else "accuracy",
             cv=5,
             n_jobs=-1,
         )

@@ -13,6 +13,7 @@ from pd_speech.data import (
     TabularDataset,
     collate_sequences,
     load_detection_split,
+    load_paper_stage_forecast_split,
     load_sequence_regression_split,
     load_sequence_split,
     load_tabular_regression_split,
@@ -48,6 +49,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--feature-selection", choices=["none", "relief", "sfs", "mutual_info"], default="none")
     parser.add_argument("--num-features", type=int, default=None)
     parser.add_argument("--sequence-backbone", choices=["lstm", "spmamba"], default="lstm")
+    parser.add_argument("--progression-mode", choices=["subject_final", "paper_stage"], default="subject_final")
+    parser.add_argument("--stage-col", default=None)
+    parser.add_argument("--stage-source-col", default="motor_UPDRS")
+    parser.add_argument("--stage-thresholds", default="10,20,30")
+    parser.add_argument("--forecast-target-stage", type=int, default=2)
+    parser.add_argument("--sequence-window", type=int, default=0)
+    parser.add_argument("--min-history", type=int, default=1)
+    parser.add_argument("--report-epochs", default="1,100,200,400,600,800,1000")
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument("--num-layers", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
@@ -172,16 +181,35 @@ def train_tabular_regression(args: argparse.Namespace) -> None:
 
 def train_progression(args: argparse.Namespace) -> None:
     is_regression = args.problem_type == "regression"
-    loader = load_sequence_regression_split if is_regression else load_sequence_split
-    split = loader(
-        args.csv,
-        args.subject_col,
-        args.time_col,
-        args.target_col,
-        parse_feature_cols(args.feature_cols),
-        args.test_size,
-        args.seed,
-    )
+    if args.progression_mode == "paper_stage":
+        if not is_regression:
+            raise ValueError("--progression-mode paper_stage requires --problem-type regression")
+        split = load_paper_stage_forecast_split(
+            args.csv,
+            args.subject_col,
+            args.time_col,
+            args.target_col,
+            parse_feature_cols(args.feature_cols),
+            args.test_size,
+            args.seed,
+            args.stage_col,
+            args.stage_source_col,
+            args.stage_thresholds,
+            args.forecast_target_stage,
+            args.sequence_window,
+            args.min_history,
+        )
+    else:
+        loader = load_sequence_regression_split if is_regression else load_sequence_split
+        split = loader(
+            args.csv,
+            args.subject_col,
+            args.time_col,
+            args.target_col,
+            parse_feature_cols(args.feature_cols),
+            args.test_size,
+            args.seed,
+        )
     selected = select_features(
         split.train_flat_x,
         split.train_flat_y,
@@ -189,8 +217,8 @@ def train_progression(args: argparse.Namespace) -> None:
         args.num_features,
     )
     feature_cols = [split.feature_cols[i] for i in selected]
-    train_items = [(x[:, selected], y) for x, y in split.train]
-    val_items = [(x[:, selected], y) for x, y in split.val]
+    train_items = [select_sequence_item(item, selected) for item in split.train]
+    val_items = [select_sequence_item(item, selected) for item in split.val]
 
     if args.sequence_backbone == "lstm":
         if is_regression:
@@ -248,6 +276,7 @@ def train_progression(args: argparse.Namespace) -> None:
             split.target_mean,
             split.target_std,
             str(run_paths(args)["log_path"]),
+            parse_int_list(args.report_epochs),
         )
     else:
         result = train_classifier(
@@ -262,6 +291,21 @@ def train_progression(args: argparse.Namespace) -> None:
             str(run_paths(args)["log_path"]),
         )
     save_run(args, model, feature_cols, [str(c) for c in split.classes], result)
+
+
+def select_sequence_item(item, selected):
+    x = item[0][:, selected]
+    if len(item) == 3:
+        return x, item[1], item[2]
+    return x, item[1]
+
+
+def parse_int_list(value: str | list[int] | tuple[int, ...] | None) -> list[int]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [int(item.strip()) for item in value.split(",") if item.strip()]
+    return [int(item) for item in value]
 
 
 def run_paths(args) -> dict[str, Path]:
@@ -310,6 +354,7 @@ def save_run(args, model, feature_cols, class_names, result) -> None:
         "feature_cols": feature_cols,
         "class_names": class_names,
         "history": result.history,
+        "paper_table": result.paper_table or [],
         "checkpoint_contents": {
             "model_state": "PyTorch model weights.",
             "args": "Training arguments after merging YAML config and CLI overrides.",

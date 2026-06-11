@@ -1,0 +1,30 @@
+task: progression
+problem_type: regression
+progression_mode: paper_stage
+csv: parkinsons+telemonitoring/parkinsons_updrs.data
+subject_col: subject#
+time_col: test_time
+target_col: motor_UPDRS
+stage_source_col: motor_UPDRS
+stage_thresholds: 10,20,30
+forecast_target_stage: 2
+sequence_backbone: lstm
+
+feature_cols: age,sex,test_time,Jitter(%),Jitter(Abs),Jitter:RAP,Jitter:PPQ5,Jitter:DDP,Shimmer,Shimmer(dB),Shimmer:APQ3,Shimmer:APQ5,Shimmer:APQ11,Shimmer:DDA,NHR,HNR,RPDE,DFA,PPE
+feature_selection: sfs
+num_features: 10
+
+hidden_dim: 150
+num_layers: 1
+dropout: 0.0
+batch_size: 64
+epochs: 1000
+lr: 0.001
+weight_decay: 0.0
+test_size: 0.3
+seed: 42
+sequence_window: 0
+min_history: 1
+report_epochs: 1,100,200,400,600,800,1000
+device: auto
+out_dir: runs/paper_lstm_stage2

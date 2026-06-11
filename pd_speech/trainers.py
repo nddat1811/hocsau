@@ -29,6 +29,7 @@ class TrainResult:
     best_val_rmse: float | None = None
     best_val_mae: float | None = None
     best_val_r2: float | None = None
+    paper_table: list[dict[str, float]] | None = None
 
 
 def make_device(requested: str) -> torch.device:
@@ -60,32 +61,44 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> tupl
     return np.concatenate(targets), np.concatenate(preds)
 
 
-def evaluate_regression(model: nn.Module, loader: DataLoader, device: torch.device) -> tuple[np.ndarray, np.ndarray]:
+def evaluate_regression(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     model.eval()
     preds = []
     targets = []
+    stages = []
     with torch.no_grad():
         for batch in loader:
             if len(batch) == 2:
                 x, y = batch
                 outputs = model(x.to(device))
-            else:
+            elif len(batch) == 3:
                 x, lengths, y = batch
                 outputs = model(x.to(device), lengths.to(device))
+            else:
+                x, lengths, y, stage = batch
+                outputs = model(x.to(device), lengths.to(device))
+                stages.append(stage.detach().cpu().numpy())
             preds.append(outputs.detach().cpu().numpy())
             targets.append(y.detach().cpu().numpy())
-    return np.concatenate(targets), np.concatenate(preds)
+    stage_values = np.concatenate(stages) if stages else None
+    return np.concatenate(targets), np.concatenate(preds), stage_values
 
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray, target_mean: float, target_std: float) -> dict[str, float]:
     y_true_raw = y_true * target_std + target_mean
     y_pred_raw = y_pred * target_std + target_mean
-    rmse = float(np.sqrt(mean_squared_error(y_true_raw, y_pred_raw)))
+    mse_raw = float(mean_squared_error(y_true_raw, y_pred_raw))
+    rmse = float(np.sqrt(mse_raw))
     mae = float(mean_absolute_error(y_true_raw, y_pred_raw))
     r2 = float(r2_score(y_true_raw, y_pred_raw))
     mse_scaled = float(mean_squared_error(y_true, y_pred))
     return {
         "val_rmse": rmse,
+        "val_mse": mse_raw,
         "val_mae": mae,
         "val_r2": r2,
         "val_loss": mse_scaled,
@@ -183,6 +196,7 @@ def train_regressor(
     target_mean: float,
     target_std: float,
     log_path: str | None = None,
+    report_epochs: list[int] | None = None,
 ) -> TrainResult:
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -192,10 +206,12 @@ def train_regressor(
     best_rmse = float("inf")
     best_metrics: dict[str, float] = {}
     history: list[dict[str, float]] = []
+    paper_table: list[dict[str, float]] = []
+    report_epoch_set = set(report_epochs or [])
     log_file = Path(log_path) if log_path else None
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        log_file.write_text("epoch,train_loss,val_loss,val_rmse,val_mae,val_r2\n", encoding="utf-8")
+        log_file.write_text("epoch,train_loss,val_loss,val_mse,val_rmse,val_mae,val_r2\n", encoding="utf-8")
 
     for epoch in tqdm(range(1, epochs + 1), desc="training"):
         model.train()
@@ -206,8 +222,11 @@ def train_regressor(
             if len(batch) == 2:
                 x, y = batch
                 outputs = model(x.to(device))
-            else:
+            elif len(batch) == 3:
                 x, lengths, y = batch
+                outputs = model(x.to(device), lengths.to(device))
+            else:
+                x, lengths, y, _stage = batch
                 outputs = model(x.to(device), lengths.to(device))
             y = y.float().to(device)
             loss = criterion(outputs, y)
@@ -217,7 +236,7 @@ def train_regressor(
             total_loss += float(loss.detach().cpu()) * int(y.size(0))
             total_examples += int(y.size(0))
 
-        y_true, y_pred = evaluate_regression(model, val_loader, device)
+        y_true, y_pred, stage_values = evaluate_regression(model, val_loader, device)
         metrics = regression_metrics(y_true, y_pred, target_mean, target_std)
         train_loss = total_loss / max(total_examples, 1)
         row = {
@@ -225,11 +244,23 @@ def train_regressor(
             "train_loss": float(train_loss),
             **metrics,
         }
+        if stage_values is not None:
+            row["val_stage"] = float(stage_values[0]) if len(np.unique(stage_values)) == 1 else -1.0
         history.append(row)
+        if epoch in report_epoch_set:
+            paper_row = {
+                "epoch": float(epoch),
+                "validation_rmse": metrics["val_rmse"],
+                "validation_loss": metrics["val_loss"],
+                "validation_mse": metrics["val_mse"],
+            }
+            if stage_values is not None and len(np.unique(stage_values)) == 1:
+                paper_row["stage"] = float(stage_values[0])
+            paper_table.append(paper_row)
         if log_file:
             with log_file.open("a", encoding="utf-8") as file:
                 file.write(
-                    f"{epoch},{train_loss:.8f},{metrics['val_loss']:.8f},"
+                    f"{epoch},{train_loss:.8f},{metrics['val_loss']:.8f},{metrics['val_mse']:.8f},"
                     f"{metrics['val_rmse']:.8f},{metrics['val_mae']:.8f},{metrics['val_r2']:.8f}\n"
                 )
         if metrics["val_rmse"] < best_rmse:
@@ -240,7 +271,7 @@ def train_regressor(
     if best_state is not None:
         model.load_state_dict(best_state)
 
-    y_true, y_pred = evaluate_regression(model, val_loader, device)
+    y_true, y_pred, _stage_values = evaluate_regression(model, val_loader, device)
     final_metrics = regression_metrics(y_true, y_pred, target_mean, target_std)
     best_metrics = best_metrics or final_metrics
     report = (
@@ -257,4 +288,5 @@ def train_regressor(
         best_val_rmse=best_metrics["val_rmse"],
         best_val_mae=best_metrics["val_mae"],
         best_val_r2=best_metrics["val_r2"],
+        paper_table=paper_table,
     )

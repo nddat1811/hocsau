@@ -1,0 +1,53 @@
+{
+  "best_val_accuracy": 0.0,
+  "best_val_f1": 0.0,
+  "best_val_rmse": 1.5949878747174242,
+  "best_val_mae": 1.2446811199188232,
+  "best_val_r2": -3.3872857093811035,
+  "classification_report": "RMSE: 1.5950\nMAE: 1.2447\nR2: -3.3873",
+  "confusion_matrix": [],
+  "model_path": "runs\\smoke_paper_spmamba_stage3\\progression_spmamba.pt",
+  "train_log_path": "runs\\smoke_paper_spmamba_stage3\\progression_spmamba_train.log",
+  "feature_cols": [
+    "age",
+    "test_time",
+    "Jitter(%)",
+    "Jitter(Abs)",
+    "Jitter:RAP",
+    "Jitter:PPQ5",
+    "NHR",
+    "RPDE",
+    "DFA",
+    "PPE"
+  ],
+  "class_names": [
+    "stage_3"
+  ],
+  "history": [
+    {
+      "epoch": 1.0,
+      "train_loss": 0.7362810492185344,
+      "val_rmse": 1.5949878747174242,
+      "val_mse": 2.5439863204956055,
+      "val_mae": 1.2446811199188232,
+      "val_r2": -3.3872857093811035,
+      "val_loss": 0.4920958876609802,
+      "val_stage": 3.0
+    }
+  ],
+  "paper_table": [
+    {
+      "epoch": 1.0,
+      "validation_rmse": 1.5949878747174242,
+      "validation_loss": 0.4920958876609802,
+      "validation_mse": 2.5439863204956055,
+      "stage": 3.0
+    }
+  ],
+  "checkpoint_contents": {
+    "model_state": "PyTorch model weights.",
+    "args": "Training arguments after merging YAML config and CLI overrides.",
+    "feature_cols": "Feature columns used by the model, after feature selection.",
+    "class_names": "Label names in model output order."
+  }
+}
