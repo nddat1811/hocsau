@@ -31,7 +31,10 @@ python train.py \
   --epochs 100
 ```
 
-Or use the YAML config:
+Or use the YAML config. This config follows the paper-style MLP setup:
+three fully connected hidden layers with 25 nodes each, ReLU, LBFGS,
+learning rate 0.1, 1000 iterations, standardized data, and 10-fold
+cross-validation.
 
 ```bash
 python train.py --config configs/figshare_detection.yaml
@@ -41,7 +44,7 @@ Training writes:
 
 - `runs/detection_mlp.pt`: checkpoint containing model weights, merged args, selected feature columns, and class names.
 - `runs/detection_mlp_metrics.json`: final metrics, selected features, confusion matrix, and epoch history.
-- `runs/detection_mlp_train.log`: per-epoch CSV log with `epoch,train_loss,val_accuracy,val_f1`.
+- `runs/detection_mlp_train_fold*.log`: per-fold CSV logs with `epoch,train_loss,val_accuracy,val_f1`.
 
 The generated CSV includes `pd_label`, `group`, `subject_id`, `utterance`, and acoustic features such as RMS, ZCR, spectral features, MFCC summaries, pitch summaries, entropy, and jitter/shimmer proxies.
 
@@ -77,6 +80,9 @@ Run sequence regression by patient timeline:
 python train.py --config configs/tele_lstm_motor.yaml
 python train.py --config configs/tele_spmamba_motor.yaml
 ```
+
+The LSTM config follows the paper-style setup with 150 hidden units,
+Adam, learning rate 0.001, and 1000 epochs.
 
 Regression logs contain:
 
